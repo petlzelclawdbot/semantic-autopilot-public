@@ -61,28 +61,62 @@ th, td {
 }
 th { background: #242a38; color: #9aa0aa; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; }
 
+/* ----- conversation thread ----- */
+.conversation-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+.qa-card {
+  background: #161a23;
+  border: 1px solid #232838;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.qa-card.error { border-color: #5a2c2c; }
+.question-bubble {
+  background: #232838;
+  color: #e6e6e6;
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.question-text { font-family: Georgia, "Times New Roman", serif; font-size: 1rem; }
+.timestamp { font-size: 0.75rem; color: #888; }
+.answer-section { padding: 1.25rem 1.5rem; }
+.loading-indicator { color: #9aa0aa; font-style: italic; }
+.qa-card.loading .answer-section::before {
+  content: '⠋';
+  display: inline-block;
+  margin-right: 0.5rem;
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ----- analyst output ----- */
 .insight {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 700;
   line-height: 1.4;
   color: #f2f2f2;
-  margin: 1.5rem 0 0.75rem;
+  margin: 0 0 0.75rem;
   border-left: 3px solid #d62728;
-  padding-left: 1rem;
+  padding-left: 0.85rem;
 }
 .analysis {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1rem;
+  font-size: 0.95rem;
   line-height: 1.6;
   color: #c8c8c8;
-  margin: 0.25rem 0 1rem 1rem;
+  margin: 0 0 1rem 0.85rem;
 }
 .chart-container {
   position: relative;
-  height: 360px;
-  margin: 1.5rem 0 0.5rem;
+  height: 320px;
+  margin: 1rem 0 0.5rem;
   background: #f8f8f6;
   border-radius: 6px;
   padding: 1.25rem 1.5rem 1rem;
@@ -92,9 +126,10 @@ th { background: #242a38; color: #9aa0aa; font-size: 0.85rem; text-transform: up
 .annotation .marker { display: inline-block; width: 0.6rem; height: 0.6rem; background: #d62728; border-radius: 50%; position: absolute; left: 0; top: 0.4rem; }
 .caveats { font-size: 0.85rem; color: #9aa0aa; font-style: italic; margin-top: 0.5rem; }
 
-details#details { margin-top: 1.5rem; }
-details#details summary { cursor: pointer; color: #9aa0aa; font-size: 0.85rem; padding: 0.5rem 0; }
-details#details[open] summary { color: #c8c8c8; }
+details.query-details { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid #232838; }
+details.query-details summary { cursor: pointer; color: #888; font-size: 0.8rem; }
+details.query-details[open] summary { color: #c8c8c8; }
+.qa-card .error-msg { background: #2a1b1b; color: #ffb4b4; padding: 0.75rem 1rem; border-radius: 4px; margin: 0; }
 
 #examples ul { padding-left: 1.25rem; }
 #examples a { color: #3b82f6; text-decoration: none; }

@@ -101,16 +101,47 @@ function stripFences(text) {
     .trim();
 }
 
-async function generateMalloyQuery(question, errorContext) {
+function summarizeRows(rows) {
+  if (!rows || rows.length === 0) return 'no rows';
+  if (rows.length === 1) return `1 row: ${JSON.stringify(rows[0])}`;
+  return `${rows.length} rows, columns: ${Object.keys(rows[0]).join(', ')}`;
+}
+
+function buildHistoryBlock(history) {
+  if (!Array.isArray(history) || history.length === 0) return '';
+  const recent = history.slice(-3);
+  const lines = recent
+    .map(
+      (h, i) =>
+        `Turn ${history.length - recent.length + i + 1}:\n` +
+        `  User asked: "${h.question}"\n` +
+        `  Query used:\n${(h.query || '').replace(/^/gm, '    ')}\n` +
+        `  Result summary: ${summarizeRows(h.rows)}`
+    )
+    .join('\n\n');
+  return (
+    `\n\n## Recent conversation context (most recent last)\n` +
+    lines +
+    `\n\nThe user's new question may reference the above. Pronouns like ` +
+    `"them"/"those"/"these" usually point at the most recent result set. ` +
+    `"The same", "also", "of those" mean carry forward filters from the ` +
+    `previous query. If the new question is clearly a new topic (different ` +
+    `subject, no pronouns or continuity words), do NOT carry filters over.`
+  );
+}
+
+async function generateMalloyQuery(question, errorContext, history) {
   const system = loadSystemPrompt();
-  let user = question;
+  const historyBlock = buildHistoryBlock(history);
+  let user = question + historyBlock;
   if (errorContext) {
     user =
       `Question: ${question}\n\n` +
       `Your previous attempt failed.\n` +
       `Failed query:\n${errorContext.failedQuery}\n\n` +
       `Error from Malloy Publisher:\n${errorContext.errorMessage}\n\n` +
-      `Generate a corrected query. Return ONLY the Malloy query.`;
+      `Generate a corrected query. Return ONLY the Malloy query.` +
+      historyBlock;
   }
   const raw = await callClaude({ system, user, maxTokens: 1024 });
   return stripFences(raw);
@@ -151,7 +182,7 @@ function extractError(body) {
 
 // ---------- Retry loop ----------
 
-async function runAskLoop(question) {
+async function runAskLoop(question, history = []) {
   const sessionId = crypto.randomBytes(4).toString('hex');
   const attempts = [];
   let errorContext = null;
@@ -159,7 +190,7 @@ async function runAskLoop(question) {
   for (let i = 0; i <= MAX_RETRIES; i++) {
     let query;
     try {
-      query = await generateMalloyQuery(question, errorContext);
+      query = await generateMalloyQuery(question, errorContext, history);
     } catch (e) {
       attempts.push({ attempt: i + 1, query: null, error: `claude: ${e.message}`, rows: null });
       break;
@@ -190,6 +221,7 @@ async function runAskLoop(question) {
         question,
         query: last.query,
         rows: out.finalRows,
+        history,
       });
     } catch (e) {
       out.analysisError = e.message;
@@ -206,15 +238,28 @@ async function runAskLoop(question) {
 // stay well under the token budget.
 const MAX_ROWS_TO_ANALYST = 50;
 
-async function analyzeResults({ question, query, rows }) {
+async function analyzeResults({ question, query, rows, history = [] }) {
   const truncated = rows.length > MAX_ROWS_TO_ANALYST;
   const shown = truncated ? rows.slice(0, MAX_ROWS_TO_ANALYST) : rows;
+
+  let contextBlock = '';
+  if (history.length > 0) {
+    const last = history[history.length - 1];
+    contextBlock =
+      `\n\n## Conversation context\n` +
+      `Previous question: "${last.question}"\n` +
+      `Previous insight: "${last.insight || '(none)'}"\n\n` +
+      `This is a follow-up. Frame the response with continuity — phrases ` +
+      `like "Of those...", "Among the...", "Compared with that..." — and ` +
+      `don't repeat background the user already heard. Focus on what's new.`;
+  }
 
   const user =
     `Question: ${question}\n\n` +
     `Malloy query that ran:\n${query}\n\n` +
     `Result rows (${rows.length} total${truncated ? `, showing first ${MAX_ROWS_TO_ANALYST}` : ''}):\n` +
     JSON.stringify(shown, null, 2) +
+    contextBlock +
     `\n\nRespond with the JSON object described in the system prompt. JSON only.`;
 
   const raw = await callClaude({
@@ -270,9 +315,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && req.url === '/api/ask') {
     try {
-      const { question } = await readJsonBody(req);
+      const { question, history } = await readJsonBody(req);
       if (!question) throw new Error('missing question');
-      const result = await runAskLoop(question);
+      const result = await runAskLoop(question, history || []);
       sendJson(res, 200, result);
     } catch (e) {
       sendJson(res, 500, { error: e.message });
@@ -301,7 +346,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && req.url === '/api/apply') {
     try {
-      const { change, retryQuestion, triggeringError } = await readJsonBody(req);
+      const { change, retryQuestion, triggeringError, history } = await readJsonBody(req);
       if (!change) throw new Error('missing change');
       if (changesThisSession >= MAX_CHANGES_PER_SESSION) {
         throw new Error(`change cap reached (${MAX_CHANGES_PER_SESSION}) — restart server to reset`);
@@ -316,7 +361,7 @@ const server = http.createServer(async (req, res) => {
       // Re-run the original question to validate.
       let retry = null;
       if (retryQuestion) {
-        retry = await runAskLoop(retryQuestion);
+        retry = await runAskLoop(retryQuestion, history || []);
       }
 
       logSession({

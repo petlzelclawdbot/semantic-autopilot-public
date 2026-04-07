@@ -179,7 +179,46 @@ reachable in subsequent questions you'd need to either (a) regenerate
 `system-prompt.txt` after each apply, or (b) inject "recently-added
 fields" into the user message dynamically.
 
-## Phase 6 — Analyst mode (NYT-style visualization)
+## Phase 7 — Conversational threading
+
+The UI is now a thread, not a single-shot. Each turn is rendered as a Q/A
+card (newest on top), and the last 4 turns are sent back to the server
+as `history` on every `/api/ask` and `/api/apply` call. The server
+splices that history into both Claude calls:
+
+- **Query generation** gets a "Recent conversation context" block
+  describing previous questions, queries, and result summaries, with
+  rules: pronouns ("them", "those") point at the most recent result;
+  "the same"/"of those" means carry forward filters; clear topic
+  switches should drop carried filters.
+- **Analysis** gets the previous question + insight, with instructions
+  to frame the response with continuity phrases ("Of those…", "Among
+  the…") and skip context the user already heard.
+
+History is capped at 4 turns (`HISTORY_TURNS` in [test-ui/app.js](test-ui/app.js))
+to keep token usage bounded. The payload is slim — `{question, query,
+rows, insight}` — chart specs and full attempt traces are not sent.
+
+A **Clear thread** button resets `conversation` and empties the DOM
+thread. Each Q/A card has a unique chart canvas id so multiple charts
+can coexist. Cards render optimistically with a "Thinking…" loading
+state, then swap in the analyst output when the call completes.
+
+### Smoke test on the four canonical flows
+
+| Flow | Result |
+| --- | --- |
+| **Filter down**: dogs → red dogs → avg mana of those | Each turn correctly carried filters: T2 added `and is_red`; T3 kept both and switched aggregate to `avg_mana_value`. Insights used "Of those…" framing. |
+| **Re-sort**: top 10 by count → sort alphabetically | T2 kept the same group_by + aggregate, only flipped `order_by` from `card_count desc` to `card_name asc`. |
+| **Topic switch**: dogs → total sets | Query layer dropped the dog filter cleanly. Analyst layer over-applied the continuity instruction and reconnected the answer back to dogs ("Those 365 Dog cards are spread across 749 sets"). Technically correct count, narratively over-eager. |
+
+The topic-switch nuance is a known prompt-tuning trade-off: telling the
+analyst to "use continuity phrases" makes follow-ups feel coherent but
+can backfire on genuine topic switches. The fix would be to teach the
+analyst to detect topic switches the same way the query generator
+already does — left as a future improvement.
+
+## Phase 8 — Analyst mode (NYT-style visualization)
 
 The test UI now makes **two** Claude calls per question:
 

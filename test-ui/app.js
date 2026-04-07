@@ -1,29 +1,16 @@
-// NYT-inspired palette — muted, mostly achromatic, one accent.
+// NYT-inspired palette
 const NYT = {
   primary: '#1a1a1a',
   secondary: '#666666',
   accent: '#d62728',
   accentBlue: '#1f77b4',
   gridline: '#e5e5e5',
-  annotation: '#333333',
 };
 
 const form = document.getElementById('ask-form');
 const questionInput = document.getElementById('question');
-const statusEl = document.getElementById('status');
-
-const insightSection = document.getElementById('insight-section');
-const insightEl = document.getElementById('insight');
-const analysisEl = document.getElementById('analysis');
-const chartWrap = document.getElementById('chart-wrap');
-const chartCanvas = document.getElementById('chart');
-const annotationsEl = document.getElementById('annotations');
-const caveatsEl = document.getElementById('caveats');
-
-const detailsEl = document.getElementById('details');
-const attemptsEl = document.getElementById('attempts');
-const resultsSection = document.getElementById('results-section');
-const resultsEl = document.getElementById('results');
+const clearBtn = document.getElementById('clear-btn');
+const threadEl = document.getElementById('thread');
 
 const enhanceSection = document.getElementById('enhance-section');
 const enhanceStatusEl = document.getElementById('enhance-status');
@@ -32,14 +19,16 @@ const enhanceBodyEl = document.getElementById('enhance-body');
 const historyEl = document.getElementById('history');
 const refreshHistoryBtn = document.getElementById('refresh-history');
 
-let lastAsk = null;
-let currentChart = null;
+// Conversation state — last N turns sent back to the server with each ask.
+const HISTORY_TURNS = 4;
+const conversation = []; // { id, question, query, rows, insight, analysis, chart, caveats, timestamp }
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const q = questionInput.value.trim();
   if (q) ask(q);
 });
+clearBtn.addEventListener('click', clearThread);
 refreshHistoryBtn.addEventListener('click', loadHistory);
 loadHistory();
 
@@ -51,107 +40,173 @@ document.querySelectorAll('#examples a[data-q]').forEach((a) => {
   });
 });
 
-function resetUi() {
-  insightSection.hidden = true;
-  insightEl.textContent = '';
-  analysisEl.hidden = true;
-  analysisEl.textContent = '';
-  chartWrap.hidden = true;
-  annotationsEl.hidden = true;
-  annotationsEl.innerHTML = '';
-  caveatsEl.hidden = true;
-  caveatsEl.textContent = '';
-  if (currentChart) { currentChart.destroy(); currentChart = null; }
-
-  detailsEl.hidden = true;
-  detailsEl.open = false;
-  attemptsEl.innerHTML = '';
-  resultsSection.hidden = true;
-  resultsEl.innerHTML = '';
-
+function clearThread() {
+  conversation.length = 0;
+  threadEl.innerHTML = '';
   enhanceSection.hidden = true;
-  enhanceBodyEl.innerHTML = '';
-  enhanceStatusEl.textContent = '';
+}
+
+function buildHistoryPayload() {
+  // Slim payload — Claude doesn't need full chart specs to resolve "them".
+  return conversation.slice(-HISTORY_TURNS).map((c) => ({
+    question: c.question,
+    query: c.query,
+    rows: c.rows,
+    insight: c.insight,
+  }));
 }
 
 async function ask(question) {
-  resetUi();
-  statusEl.textContent = 'Generating Malloy…';
+  enhanceSection.hidden = true;
+  questionInput.value = '';
+  const id = 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+
+  // Optimistically render a loading card at the top.
+  const card = createCardSkeleton(id, question);
+  threadEl.prepend(card);
+
   try {
     const res = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, history: buildHistoryPayload() }),
     });
     const data = await res.json();
-    statusEl.textContent = '';
 
     if (data.error) {
-      showError(data.error);
+      fillCardWithError(card, data.error);
       return;
     }
-    lastAsk = data;
 
-    // Always populate the collapsible details.
-    detailsEl.hidden = false;
-    renderAttempts(data.attempts);
-    if (data.finalRows) {
-      renderResults(data.finalRows);
-      resultsSection.hidden = false;
+    if (data.finalError) {
+      fillCardWithError(card, data.finalError, data);
+      if (data.enhancementCandidate) offerEnhancement(data, question);
+      return;
     }
 
-    // Analyst output — the headline.
-    if (data.analysis) {
-      renderAnalysis(data.analysis);
-    } else if (data.finalError) {
-      showError(data.finalError);
-      if (data.enhancementCandidate) offerEnhancement(data);
-    } else if (data.analysisError) {
-      showError(`Analyst failed: ${data.analysisError}`);
-    }
+    const last = data.attempts[data.attempts.length - 1];
+    const entry = {
+      id,
+      question,
+      query: last.query,
+      rows: data.finalRows,
+      insight: data.analysis?.insight ?? '(no insight)',
+      analysis: data.analysis?.analysis ?? null,
+      chart: data.analysis?.chart ?? null,
+      caveats: data.analysis?.caveats ?? null,
+      attempts: data.attempts,
+      timestamp: Date.now(),
+    };
+    conversation.push(entry);
+    fillCard(card, entry);
   } catch (err) {
-    statusEl.textContent = '';
-    showError(err.message);
+    fillCardWithError(card, err.message);
   }
 }
 
-function renderAnalysis(a) {
-  insightSection.hidden = false;
-  insightEl.textContent = a.insight || '(no insight returned)';
-  if (a.analysis) {
-    analysisEl.textContent = a.analysis;
-    analysisEl.hidden = false;
-  }
-  if (a.chart) {
-    renderChart(a.chart);
-  }
-  if (a.caveats) {
-    caveatsEl.textContent = `Caveats: ${a.caveats}`;
-    caveatsEl.hidden = false;
+function createCardSkeleton(id, question) {
+  const card = document.createElement('div');
+  card.className = 'qa-card loading';
+  card.id = id;
+  card.innerHTML = `
+    <div class="question-bubble">
+      <span class="question-text">${escapeHtml(question)}</span>
+      <span class="timestamp">just now</span>
+    </div>
+    <div class="answer-section">
+      <div class="loading-indicator">Thinking…</div>
+    </div>`;
+  return card;
+}
+
+function fillCard(card, entry) {
+  card.classList.remove('loading');
+  const chartId = `chart_${entry.id}`;
+  const answer = document.createElement('div');
+  answer.className = 'answer-section';
+  answer.innerHTML = `
+    <p class="insight">${escapeHtml(entry.insight)}</p>
+    ${entry.analysis ? `<p class="analysis">${escapeHtml(entry.analysis)}</p>` : ''}
+    ${entry.chart ? `<div class="chart-container"><canvas id="${chartId}"></canvas></div>` : ''}
+    ${entry.chart && entry.chart.annotations && entry.chart.annotations.length
+      ? `<div class="annotations">${entry.chart.annotations.map((a) => {
+          const label = entry.chart.labels[a.index] ?? `#${a.index}`;
+          return `<div class="annotation"><span class="marker"></span><strong>${escapeHtml(label)}:</strong> ${escapeHtml(a.text)}</div>`;
+        }).join('')}</div>`
+      : ''}
+    ${entry.caveats ? `<p class="caveats">Caveats: ${escapeHtml(entry.caveats)}</p>` : ''}
+    <details class="query-details">
+      <summary>Query &amp; raw data</summary>
+      <div class="attempts">${entry.attempts.map(renderAttemptHtml).join('')}</div>
+      <div class="raw-rows">${renderTableHtml(entry.rows)}</div>
+    </details>`;
+  card.querySelector('.answer-section').replaceWith(answer);
+
+  if (entry.chart) {
+    setTimeout(() => renderChart(entry.chart, chartId), 10);
   }
 }
 
-function renderChart(spec) {
-  chartWrap.hidden = false;
-  if (currentChart) currentChart.destroy();
+function fillCardWithError(card, message, fullData) {
+  card.classList.remove('loading');
+  card.classList.add('error');
+  const detailsHtml = fullData
+    ? `<details class="query-details"><summary>Attempts</summary><div class="attempts">${(fullData.attempts || []).map(renderAttemptHtml).join('')}</div></details>`
+    : '';
+  card.querySelector('.answer-section').innerHTML =
+    `<p class="error-msg">${escapeHtml(message)}</p>${detailsHtml}`;
+}
 
+function renderAttemptHtml(a) {
+  const status = a.error ? 'failed' : 'succeeded';
+  const cls = a.error ? 'error' : 'ok';
+  return (
+    `<div class="attempt ${cls}">` +
+    `<div class="attempt-header">Attempt ${a.attempt} — ${status}</div>` +
+    (a.query ? `<pre class="query">${escapeHtml(a.query)}</pre>` : '') +
+    (a.error ? `<pre class="error-msg">${escapeHtml(a.error)}</pre>` : '') +
+    `</div>`
+  );
+}
+
+function renderTableHtml(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return '<p class="hint">(no rows)</p>';
+  const cols = Object.keys(rows[0]);
+  const head = cols.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
+  const body = rows
+    .map(
+      (r) =>
+        '<tr>' +
+        cols
+          .map((c) => {
+            const v = r[c];
+            const text =
+              typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(3) : v ?? '';
+            return `<td>${escapeHtml(text)}</td>`;
+          })
+          .join('') +
+        '</tr>'
+    )
+    .join('');
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderChart(spec, canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
   const horizontal = spec.type === 'horizontalBar';
   const type = spec.type === 'line' ? 'line' : 'bar';
+  const annotated = new Set((spec.annotations || []).map((a) => a.index));
+  const bg = spec.data.map((_, i) => (annotated.has(i) ? NYT.accent : NYT.primary));
 
-  // Highlight annotated bars with the accent color.
-  const annotatedIndices = new Set((spec.annotations || []).map((a) => a.index));
-  const bgColors = spec.data.map((_, i) =>
-    annotatedIndices.has(i) ? NYT.accent : NYT.primary
-  );
-
-  currentChart = new Chart(chartCanvas, {
+  new Chart(canvas, {
     type,
     data: {
       labels: spec.labels,
       datasets: [
         {
           data: spec.data,
-          backgroundColor: type === 'line' ? 'transparent' : bgColors,
+          backgroundColor: type === 'line' ? 'transparent' : bg,
           borderColor: type === 'line' ? NYT.primary : undefined,
           borderWidth: type === 'line' ? 2 : 0,
           pointBackgroundColor: NYT.primary,
@@ -170,16 +225,12 @@ function renderChart(spec) {
         title: {
           display: !!spec.title,
           text: spec.title,
-          font: { size: 18, weight: 'bold', family: 'Georgia, "Times New Roman", serif' },
+          font: { size: 17, weight: 'bold', family: 'Georgia, "Times New Roman", serif' },
           color: NYT.primary,
           align: 'start',
-          padding: { top: 4, bottom: 16 },
+          padding: { top: 4, bottom: 14 },
         },
-        tooltip: {
-          backgroundColor: NYT.primary,
-          titleFont: { family: 'Georgia, serif' },
-          bodyFont: { family: 'Georgia, serif' },
-        },
+        tooltip: { backgroundColor: NYT.primary },
       },
       scales: {
         x: {
@@ -196,124 +247,53 @@ function renderChart(spec) {
       },
     },
   });
-
-  // Render annotations as direct labels below the chart (simpler and more
-  // reliable than Chart.js annotation plugin for this demo).
-  if (spec.annotations && spec.annotations.length) {
-    annotationsEl.hidden = false;
-    annotationsEl.innerHTML = spec.annotations
-      .map((a) => {
-        const label = spec.labels[a.index] ?? `#${a.index}`;
-        return `<div class="annotation"><span class="marker"></span><strong>${escapeHtml(label)}:</strong> ${escapeHtml(a.text)}</div>`;
-      })
-      .join('');
-  }
 }
 
-function showError(msg) {
-  detailsEl.hidden = false;
-  detailsEl.open = true;
-  const div = document.createElement('div');
-  div.className = 'attempt error';
-  div.innerHTML = `<div class="attempt-header">Error</div><pre class="error-msg">${escapeHtml(msg)}</pre>`;
-  attemptsEl.appendChild(div);
-}
+// ---------- model enhancement (shared panel) ----------
 
-function renderAttempts(attempts) {
-  attemptsEl.innerHTML = '';
-  attempts.forEach((a) => {
-    const div = document.createElement('div');
-    div.className = 'attempt ' + (a.error ? 'error' : 'ok');
-    const status = a.error ? 'failed' : 'succeeded';
-    div.innerHTML =
-      `<div class="attempt-header">Attempt ${a.attempt} — ${status}</div>` +
-      (a.query ? `<pre class="query">${escapeHtml(a.query)}</pre>` : '') +
-      (a.error ? `<pre class="error-msg">${escapeHtml(a.error)}</pre>` : '');
-    attemptsEl.appendChild(div);
-  });
-}
-
-function renderResults(rows) {
-  resultsEl.innerHTML = '';
-  if (!Array.isArray(rows) || rows.length === 0) {
-    resultsEl.textContent = '(no rows)';
-    return;
-  }
-  const cols = Object.keys(rows[0]);
-  const table = document.createElement('table');
-  const thead = document.createElement('thead');
-  const headRow = document.createElement('tr');
-  cols.forEach((c) => {
-    const th = document.createElement('th');
-    th.textContent = c;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-  const tbody = document.createElement('tbody');
-  rows.forEach((row) => {
-    const tr = document.createElement('tr');
-    cols.forEach((c) => {
-      const td = document.createElement('td');
-      const v = row[c];
-      td.textContent =
-        typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(3) : v ?? '';
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  resultsEl.appendChild(table);
-}
-
-// ---------- model enhancement ----------
-
-async function offerEnhancement(askData) {
+function offerEnhancement(askData, question) {
   enhanceSection.hidden = false;
   enhanceStatusEl.textContent =
     'Looks like a field is missing from the model. Asking Claude for a fix proposal…';
   const lastAttempt = askData.attempts[askData.attempts.length - 1];
-  try {
-    const res = await fetch('/api/propose', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        question: askData.question,
-        lastQuery: lastAttempt.query,
-        lastError: lastAttempt.error,
-      }),
-    });
-    const data = await res.json();
-    if (data.error) { enhanceStatusEl.textContent = `Could not propose change: ${data.error}`; return; }
-    renderProposedChange(data.change, askData.question);
-  } catch (e) {
-    enhanceStatusEl.textContent = `Error: ${e.message}`;
-  }
+  fetch('/api/propose', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      question,
+      lastQuery: lastAttempt.query,
+      lastError: lastAttempt.error,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.error) {
+        enhanceStatusEl.textContent = `Could not propose change: ${data.error}`;
+        return;
+      }
+      renderProposedChange(data.change, question, lastAttempt.error);
+    })
+    .catch((e) => (enhanceStatusEl.textContent = `Error: ${e.message}`));
 }
 
-function renderProposedChange(change, question) {
+function renderProposedChange(change, question, triggeringError) {
   enhanceStatusEl.textContent = `Claude proposes a ${change.changeType} in ${change.file}:`;
   enhanceBodyEl.innerHTML =
     `<pre class="snippet">${escapeHtml(change.snippet)}</pre>` +
     `<p class="hint"><strong>Reasoning:</strong> ${escapeHtml(change.reasoning || '(none)')}</p>` +
-    `<div class="actions">` +
-    `<button id="apply-btn">Apply &amp; retry</button>` +
-    `<button id="skip-btn" class="secondary">Skip</button>` +
-    `</div>`;
-  document.getElementById('skip-btn').addEventListener('click', () => {
-    enhanceSection.hidden = true;
-  });
+    `<div class="actions"><button id="apply-btn">Apply &amp; retry</button><button id="skip-btn" class="secondary">Skip</button></div>`;
+  document.getElementById('skip-btn').addEventListener('click', () => (enhanceSection.hidden = true));
   document.getElementById('apply-btn').addEventListener('click', async () => {
     enhanceStatusEl.textContent = 'Applying change & re-running…';
     try {
-      const lastAttempt = lastAsk?.attempts?.[lastAsk.attempts.length - 1];
       const res = await fetch('/api/apply', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           change,
           retryQuestion: question,
-          triggeringError: lastAttempt?.error,
+          triggeringError,
+          history: buildHistoryPayload(),
         }),
       });
       const data = await res.json();
@@ -326,13 +306,27 @@ function renderProposedChange(change, question) {
         ` Reload: ${data.apply.reloadStatus}.` +
         commitInfo +
         ` Changes this session: ${data.changesThisSession}.`;
-      if (data.retry) {
-        renderAttempts(data.retry.attempts);
-        if (data.retry.finalRows) {
-          renderResults(data.retry.finalRows);
-          resultsSection.hidden = false;
-        }
-        if (data.retry.analysis) renderAnalysis(data.retry.analysis);
+
+      // Inject the retry result as a fresh card at the top of the thread.
+      if (data.retry && data.retry.finalRows && data.retry.analysis) {
+        const id = 'msg_' + Date.now();
+        const card = createCardSkeleton(id, question);
+        threadEl.prepend(card);
+        const last = data.retry.attempts[data.retry.attempts.length - 1];
+        const entry = {
+          id,
+          question,
+          query: last.query,
+          rows: data.retry.finalRows,
+          insight: data.retry.analysis.insight,
+          analysis: data.retry.analysis.analysis,
+          chart: data.retry.analysis.chart,
+          caveats: data.retry.analysis.caveats,
+          attempts: data.retry.attempts,
+          timestamp: Date.now(),
+        };
+        conversation.push(entry);
+        fillCard(card, entry);
       }
       loadHistory();
     } catch (e) {
@@ -341,7 +335,7 @@ function renderProposedChange(change, question) {
   });
 }
 
-// ---------- history ----------
+// ---------- model history (commits) ----------
 
 async function loadHistory() {
   try {

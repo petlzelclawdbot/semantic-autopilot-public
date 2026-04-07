@@ -11,9 +11,9 @@
   <main>
     <h1>Ask the MTG card database</h1>
     <p class="hint">
-      Claude writes Malloy against the MTGJSON card model, executes it,
-      and then interprets the results. Charts appear only when they add
-      understanding.
+      Conversational analyst over MTGJSON. Follow-up questions remember the
+      previous turn — try "How many dog cards are there?" then "How many of
+      them are red?".
     </p>
 
     <form id="ask-form">
@@ -21,38 +21,17 @@
         id="question"
         type="text"
         autocomplete="off"
-        placeholder="e.g. How has the number of cards per year changed?"
+        placeholder="Ask a question, then a follow-up…"
         autofocus
       />
       <button type="submit">Ask</button>
+      <button type="button" id="clear-btn" class="secondary">Clear thread</button>
     </form>
 
-    <div id="status"></div>
+    <!-- Conversation thread, newest on top -->
+    <div class="conversation-thread" id="thread"></div>
 
-    <!-- Analyst output -->
-    <section id="insight-section" hidden>
-      <p id="insight" class="insight"></p>
-      <p id="analysis" class="analysis" hidden></p>
-      <div id="chart-wrap" class="chart-container" hidden>
-        <canvas id="chart"></canvas>
-      </div>
-      <div id="annotations" class="annotations" hidden></div>
-      <p id="caveats" class="caveats" hidden></p>
-    </section>
-
-    <!-- Collapsible details: attempts, query, raw rows -->
-    <details id="details" hidden>
-      <summary>Show query &amp; raw data</summary>
-      <section id="attempts-section">
-        <h2>Attempts</h2>
-        <div id="attempts"></div>
-      </section>
-      <section id="results-section" hidden>
-        <h2>Rows</h2>
-        <div id="results"></div>
-      </section>
-    </details>
-
+    <!-- Model enhancement panel (shared across the thread) -->
     <section id="enhance-section" hidden>
       <h2>Model enhancement</h2>
       <p id="enhance-status" class="hint"></p>
@@ -65,15 +44,13 @@
     </section>
 
     <section id="examples">
-      <h3>Try:</h3>
-      <ul>
-        <li><a href="#" data-q="How many total cards are there?">How many total cards are there? <em>(no chart)</em></a></li>
-        <li><a href="#" data-q="Show me cards by rarity">Show me cards by rarity <em>(bar chart)</em></a></li>
-        <li><a href="#" data-q="How has the number of cards per year changed?">How has the number of cards per year changed? <em>(line)</em></a></li>
-        <li><a href="#" data-q="Are there more red or blue cards?">Are there more red or blue cards? <em>(no chart)</em></a></li>
-        <li><a href="#" data-q="What's the relationship between mana value and rarity?">What's the relationship between mana value and rarity?</a></li>
-        <li><a href="#" data-q="Who are the 10 most prolific artists?">Who are the 10 most prolific artists?</a></li>
-      </ul>
+      <h3>Try a thread:</h3>
+      <ol>
+        <li><a href="#" data-q="How many dog cards are there?">How many dog cards are there?</a></li>
+        <li><a href="#" data-q="How many of them are red?">How many of them are red?</a></li>
+        <li><a href="#" data-q="What's the average mana value?">What's the average mana value?</a></li>
+        <li><a href="#" data-q="How many total sets are there?">How many total sets are there? <em>(topic switch)</em></a></li>
+      </ol>
     </section>
   </main>
   <script src="/app.js"></script>
