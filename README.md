@@ -7,6 +7,8 @@ Can modern LLMs shorten the time to insight by quickly learning a dataset and cr
 This test took roughly an hour, and required zero coding.  The prompts were generated using Claude after I explained my idea.
 
 
+![Test UI screenshot](screenshot.jpg)
+
 The stack:
 
 ```text
