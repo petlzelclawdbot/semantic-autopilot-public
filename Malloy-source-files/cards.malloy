@@ -178,7 +178,4 @@ source: cards is duckdb.table('/Users/benpelcyger/repos/Malloy Test/data/cards.p
     limit: 20
   }
 
-  -- @ai-added 2026-04-07T15:06:16.120Z
-  dimension: is_oversized is isOversized = true
-
 }
