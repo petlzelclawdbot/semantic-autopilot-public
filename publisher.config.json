@@ -1,0 +1,13 @@
+{
+  "projects": [
+    {
+      "name": "mtgjson",
+      "packages": [
+        {
+          "name": "mtgjson-analytics",
+          "location": "./Malloy-source-files"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+-- sets.malloy
+-- Semantic model for MTG sets (expansion releases, commander products, etc.).
+-- Source of truth for column definitions: catalog/sets.odcs.yaml
+-- One row per set. ~855 rows. Joined to cards on cards.setCode = sets.code.
+
+source: sets is duckdb.table('/Users/benpelcyger/repos/Malloy Test/data/sets.parquet') extend {
+  primary_key: code
+
+  -- ---- Dimensions ----
+  dimension:
+    set_code is code
+    set_name is name
+    -- releaseDate is stored as varchar but ISO-formatted; cast for date math.
+    release_date is cast(releaseDate as date)
+    release_year is year(cast(releaseDate as date))
+    set_type is type
+    block_name is block
+    parent_code is parentCode
+    base_set_size is baseSetSize
+    total_set_size is totalSetSize
+    is_foil_only is isFoilOnly
+    is_non_foil_only is isNonFoilOnly
+    is_online_only is isOnlineOnly
+    is_paper_only is isPaperOnly
+    is_foreign_only is isForeignOnly
+    is_partial_preview is isPartialPreview
+    -- Derived: does this set have supplemental printings beyond the base run?
+    has_bonus_printings is totalSetSize > baseSetSize
+
+  -- ---- Measures ----
+  measure:
+    set_count is count()
+    avg_base_set_size is avg(baseSetSize)
+    avg_total_set_size is avg(totalSetSize)
+    total_printings is sum(totalSetSize)
+    expansion_count is count() { where: type = 'expansion' }
+    commander_count is count() { where: type = 'commander' }
+
+  -- ---- Views ----
+
+  -- Count of sets by type, ordered by frequency.
+  view: by_type is {
+    group_by: set_type
+    aggregate: set_count, avg_base_set_size
+    order_by: set_count desc
+  }
+
+  -- Release cadence over time.
+  view: by_year is {
+    group_by: release_year
+    aggregate: set_count, total_printings
+    order_by: release_year desc
+  }
+}

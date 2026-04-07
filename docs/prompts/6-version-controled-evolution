@@ -1,0 +1,117 @@
+# Task: Add Git-Based Version Control for Auto-Evolving Malloy Models
+
+## Context
+The conversational analytics system can now propose model changes when queries fail due to missing fields. The Malloy source files are already in a git repo. We'll use git to track all auto-generated changes, giving us full history, easy rollback, and visibility into how the model evolves.
+
+## Malloy Source Files Location
+`~/repos/Malloy Test/Malloy-source-files/` (already a git repo)
+
+## Your Task
+
+### Step 1: Verify Git State
+```bash
+cd ~/repos/Malloy\ Test/Malloy-source-files
+git status
+git log --oneline -5
+```
+
+Confirm current state and note the HEAD commit as our baseline.
+
+### Step 2: Update Model Enhancement Logic
+
+Modify `model-enhancer.js` to commit after every change:
+```javascript
+async function applyModelChange(change) {
+  const { file, code, reasoning, userQuestion } = change;
+  
+  // 1. Read current file
+  // 2. Insert new code in appropriate section
+  // 3. Write file
+  
+  // 4. Git commit with descriptive message
+  await exec(`git add ${file}`);
+  await exec(`git commit -m "Auto: Add ${change.changeType} for: ${userQuestion}" -m "Reasoning: ${reasoning}" -m "Code added:\n${code}"`);
+  
+  // 5. Return commit hash for reference
+  const hash = await exec('git rev-parse --short HEAD');
+  return { success: true, commitHash: hash };
+}
+```
+
+### Step 3: Add Rollback Capability
+```javascript
+async function rollbackLastChange() {
+  await exec('git revert HEAD --no-edit');
+  // Trigger Publisher reload
+  return { success: true, message: 'Reverted last model change' };
+}
+
+async function rollbackToCommit(hash) {
+  await exec(`git revert ${hash}..HEAD --no-edit`);
+  return { success: true };
+}
+```
+
+### Step 4: Update UI
+
+Add simple controls:
+- Show last commit hash + message after successful model change
+- "Undo Last Change" button that calls rollbackLastChange()
+- Display recent commits inline
+
+### Step 5: Add Git Log Viewer
+
+Create a function that returns recent model evolution:
+```javascript
+async function getModelHistory(limit = 10) {
+  const log = await exec(`git log --oneline -${limit}`);
+  return log.split('\n').map(line => {
+    const [hash, ...messageParts] = line.split(' ');
+    return { hash, message: messageParts.join(' ') };
+  });
+}
+```
+
+Display this in the UI so I can see how the model evolves during a session.
+
+### Step 6: Structured Commit Messages
+
+Use a consistent format for auto-commits:
+Auto: [add_dimension|add_measure|add_view|fix_type] for: "<user question>"
+Reasoning: <LLM's explanation>
+Code added:
+<the actual Malloy code>
+Error that triggered this:
+<the original error message>
+
+This makes `git log` and `git diff` useful for analysis.
+
+### Step 7: Handle Publisher Reload After Changes
+
+After committing a model change:
+1. Check if Publisher has a reload endpoint
+2. If not, add a note in the UI: "Model updated (commit: abc123). Restart Publisher to apply."
+
+### Step 8: Update .gitignore (if needed)
+
+Ensure these are ignored:
+Data files (large, don't version)
+*.parquet
+*.duckdb
+OS files
+.DS_Store
+Logs
+*.log
+
+## Output
+- Updated `model-enhancer.js` with git integration
+- Updated UI with commit display and rollback button
+- `.gitignore` updated if needed
+- README updated with git workflow
+
+## Success Criteria
+1. Every model change creates a git commit
+2. Commit messages clearly show what changed and why
+3. I can run `git log --oneline` and see the model evolution
+4. I can rollback a bad change with one click
+5. `git diff HEAD~3` shows me exactly what the LLM added over last 3 changes

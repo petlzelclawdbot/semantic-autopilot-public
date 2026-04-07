@@ -1,0 +1,38 @@
+-- queries.malloy
+-- Smoke-test queries demonstrating the cards + sets semantic model.
+-- Run any of these with the Malloy VS Code extension or `malloy-cli`.
+
+import "cards.malloy"
+
+-- 1. Card count + avg mana value by rarity.
+run: cards -> by_rarity
+
+-- 2. Per-color totals (white, blue, black, red, green, colorless, multicolor).
+run: cards -> color_distribution
+
+-- 3. Top 25 sets by printing count, with nested rarity breakdown.
+run: cards -> by_set
+
+-- 4. Average mana value of mythic creatures.
+run: cards -> {
+  where: rarity = 'mythic' and is_creature
+  aggregate:
+    card_count
+    unique_card_count
+    avg_mana_value
+}
+
+-- 5. Sets with the most multicolor cards (joined through to sets dimension).
+run: cards -> multicolor_sets
+
+-- 6. Rarity mix by set type (drills across the join).
+run: cards -> {
+  group_by: sets.set_type
+  aggregate:
+    card_count
+    mythic_count
+    rare_count
+    uncommon_count
+    common_count
+  order_by: card_count desc
+}

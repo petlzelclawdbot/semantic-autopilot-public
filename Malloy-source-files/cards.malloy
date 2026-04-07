@@ -1,0 +1,181 @@
+-- cards.malloy
+-- Semantic model for MTG card printings.
+-- Source of truth for column definitions: catalog/cards.odcs.yaml
+-- One row per printing (~109,733 rows). Cards reprinted across sets appear
+-- multiple times; use `uuid` for row identity and `count(distinct name)` for
+-- unique-card counts.
+--
+-- IMPORTANT: List-like columns (colors, colorIdentity, types, subtypes,
+-- supertypes, keywords, producedMana, etc.) are stored as comma-joined
+-- VARCHARs in the parquet, NOT native LISTs. Malloy's `?` array operator
+-- therefore does NOT apply — we use LIKE-style string matching (`~`) instead.
+-- e.g. `colors ~ '%W%'` tests "contains white". A single-color card has
+-- colors = 'W'; a two-color card has colors = 'U, R'.
+
+import "sets.malloy"
+
+source: cards is duckdb.table('/Users/benpelcyger/repos/Malloy Test/data/cards.parquet') extend {
+  primary_key: uuid
+
+  -- ---- Join to sets dimension ----
+  join_one: sets on setCode = sets.set_code
+
+  -- ---- Raw / renamed dimensions ----
+  dimension:
+    card_name is name
+    set_code is setCode
+    collector_number is `number`
+    mana_cost is manaCost
+    mana_value is manaValue
+    colors_raw is colors
+    color_identity_raw is colorIdentity
+    type_line is type
+    card_types is types
+    subtypes_raw is subtypes
+    supertypes_raw is supertypes
+    rules_text is text
+    flavor_text is flavorText
+    keywords_raw is keywords
+    frame_effects is frameEffects
+    frame_version is frameVersion
+    border_color is borderColor
+    produced_mana is producedMana
+    edhrec_rank is edhrecRank
+    edhrec_saltiness is edhrecSaltiness
+    is_reserved is isReserved
+    is_reprint is isReprint
+    is_promo is isPromo
+    is_full_art is isFullArt
+    is_funny is isFunny
+    is_online_only is isOnlineOnly
+    is_story_spotlight is isStorySpotlight
+
+  -- ---- Computed dimensions ----
+  dimension:
+    -- Color flags (substring match on comma-joined varchar).
+    is_white is colors ~ '%W%'
+    is_blue  is colors ~ '%U%'
+    is_black is colors ~ '%B%'
+    is_red   is colors ~ '%R%'
+    is_green is colors ~ '%G%'
+    is_colorless is colors is null or colors = ''
+
+    -- Color count: cheap approximation — count commas in colors + 1, or 0 if empty.
+    -- NOTE: Assumes MTGJSON's "W, U" formatting (one comma per extra color).
+    color_count is
+      pick 0 when colors is null or colors = ''
+      else length(colors) - length(replace(colors, ',', '')) + 1
+
+    is_multicolor is color_count > 1
+    is_monocolor  is color_count = 1
+
+    -- Type flags (substring match on comma-joined types varchar).
+    is_creature     is types ~ '%Creature%'
+    is_instant      is types ~ '%Instant%'
+    is_sorcery      is types ~ '%Sorcery%'
+    is_enchantment  is types ~ '%Enchantment%'
+    is_artifact     is types ~ '%Artifact%'
+    is_land         is types ~ '%Land%'
+    is_planeswalker is types ~ '%Planeswalker%'
+    is_battle       is types ~ '%Battle%'
+
+    is_legendary is supertypes ~ '%Legendary%'
+    is_basic     is supertypes ~ '%Basic%'
+
+  -- ---- Measures ----
+  measure:
+    card_count is count()
+    unique_card_count is count(name)
+    avg_mana_value is avg(manaValue)
+    max_mana_value is max(manaValue)
+    avg_edhrec_rank is avg(edhrecRank)
+
+    -- Rarity slices
+    mythic_count   is count() { where: rarity = 'mythic' }
+    rare_count     is count() { where: rarity = 'rare' }
+    uncommon_count is count() { where: rarity = 'uncommon' }
+    common_count   is count() { where: rarity = 'common' }
+
+    -- Type slices (use the computed dimension flags).
+    creature_count     is count() { where: is_creature }
+    instant_count      is count() { where: is_instant }
+    sorcery_count      is count() { where: is_sorcery }
+    planeswalker_count is count() { where: is_planeswalker }
+    land_count         is count() { where: is_land }
+
+    -- Color slices
+    multicolor_count is count() { where: is_multicolor }
+    colorless_count  is count() { where: is_colorless }
+    white_count is count() { where: is_white }
+    blue_count  is count() { where: is_blue }
+    black_count is count() { where: is_black }
+    red_count   is count() { where: is_red }
+    green_count is count() { where: is_green }
+
+    reserved_list_count is count() { where: isReserved = true }
+
+  -- ---- Views ----
+
+  -- Card count and avg mana value broken out by rarity.
+  view: by_rarity is {
+    group_by: rarity
+    aggregate:
+      card_count
+      unique_card_count
+      avg_mana_value
+    order_by: card_count desc
+  }
+
+  -- Count by raw colors string. Note: multicolor cards share a bucket
+  -- ("U, R" is distinct from "R"). For true per-color counts see
+  -- color_distribution below.
+  view: by_color is {
+    group_by: colors_raw
+    aggregate: card_count, avg_mana_value
+    order_by: card_count desc
+  }
+
+  -- Per-color totals using the boolean flags (a card counts once per color it contains).
+  view: color_distribution is {
+    aggregate:
+      white_count
+      blue_count
+      black_count
+      red_count
+      green_count
+      colorless_count
+      multicolor_count
+  }
+
+  -- Cards per set with a nested rarity breakdown.
+  view: by_set is {
+    group_by: set_code
+    aggregate: card_count, avg_mana_value
+    order_by: card_count desc
+    limit: 25
+    nest: rarity_breakdown is {
+      group_by: rarity
+      aggregate: card_count
+      order_by: card_count desc
+    }
+  }
+
+  -- Card count by primary type flag. Overlapping (a card can be multiple types).
+  view: by_type is {
+    aggregate:
+      creature_count
+      instant_count
+      sorcery_count
+      planeswalker_count
+      land_count
+  }
+
+  -- Joined view: which sets have the most multicolor cards?
+  view: multicolor_sets is {
+    group_by: sets.set_name, sets.release_year
+    aggregate: multicolor_count, card_count
+    order_by: multicolor_count desc
+    limit: 20
+  }
+
+}

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Malloy × Claude — MTG analytics</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Ask the MTG card database</h1>
+    <p class="hint">
+      Claude → Malloy → DuckDB. Failed queries auto-retry up to 2× with the
+      error fed back. If retries can't fix it, you'll be offered an
+      additive model change to apply.
+    </p>
+
+    <form id="ask-form">
+      <input
+        id="question"
+        type="text"
+        autocomplete="off"
+        placeholder="e.g. How many cards are there by rarity?"
+        autofocus
+      />
+      <button type="submit">Ask</button>
+    </form>
+
+    <div id="status"></div>
+
+    <section id="attempts-section" hidden>
+      <h2>Attempts</h2>
+      <div id="attempts"></div>
+    </section>
+
+    <section id="results-section" hidden>
+      <h2>Results</h2>
+      <div id="results"></div>
+    </section>
+
+    <section id="enhance-section" hidden>
+      <h2>Model enhancement</h2>
+      <p id="enhance-status" class="hint"></p>
+      <div id="enhance-body"></div>
+    </section>
+
+    <section id="history-section">
+      <h2>Model history <button id="refresh-history" class="secondary tiny">refresh</button></h2>
+      <div id="history">(none yet)</div>
+    </section>
+
+    <section id="examples">
+      <h3>Try:</h3>
+      <ul>
+        <li><a href="#" data-q="How many cards are there?">How many cards are there?</a></li>
+        <li><a href="#" data-q="Show me card count by rarity">Show me card count by rarity</a></li>
+        <li><a href="#" data-q="What's the average mana value of mythic creatures?">What's the average mana value of mythic creatures?</a></li>
+        <li><a href="#" data-q="Which 10 sets have the most cards?">Which 10 sets have the most cards?</a></li>
+        <li><a href="#" data-q="How many multicolor cards are in each set? Top 10.">How many multicolor cards are in each set? Top 10.</a></li>
+        <li><a href="#" data-q="Who is the most prolific artist by card count?">Who is the most prolific artist by card count? <em>(should trigger model enhancement — artist isn't exposed)</em></a></li>
+      </ul>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

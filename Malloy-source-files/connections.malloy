@@ -1,0 +1,10 @@
+-- connections.malloy
+-- Shared DuckDB connection / path conventions for the MTGJSON models.
+--
+-- Malloy's duckdb connector reads parquet files directly via
+-- duckdb.table('<path>'). Paths are resolved relative to the .malloy file
+-- that references them, so models in this directory use '../data/*.parquet'.
+--
+-- There is no standalone "connection" object to declare here — this file
+-- exists as documentation of the convention. Each source file below uses
+-- duckdb.table('../data/<file>.parquet') directly.

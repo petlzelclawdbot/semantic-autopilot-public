@@ -1,0 +1,554 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: 6b2f1f4a-3a8e-4d21-9a0e-mtgjson-cards
+name: mtgjson_cards
+version: 1.0.0
+status: active
+description:
+  purpose: >
+    Printing-level catalog of Magic: The Gathering cards from MTGJSON.
+    One row per unique printing (same card reprinted in multiple sets
+    produces multiple rows, distinguished by uuid). Supports analytics
+    on card mechanics, rarity distribution, color/type breakdowns, and
+    set composition.
+
+# Relationships:
+#   cards.setCode  ->  sets.code   (many-to-one)
+
+schema:
+  - name: cards
+    logicalType: object
+    physicalType: table
+    description: One row per card printing. ~109,733 rows.
+    properties:
+      - name: uuid
+        businessName: Card Printing UUID
+        logicalType: string
+        physicalType: varchar
+        description: MTGJSON-assigned unique identifier for this specific printing of a card. Stable across data refreshes.
+        required: true
+        primaryKey: true
+        examples:
+          - 670e2919-0145-5657-b4fa-2ac40890222a
+          - c1d8654b-0a31-5f99-854c-52ac8aa0baa2
+        tags: [identifier, primary-key]
+
+      - name: name
+        businessName: Card Name
+        logicalType: string
+        physicalType: varchar
+        description: Official English card name. Not unique — the same card is reprinted across many sets.
+        required: true
+        primaryKey: false
+        examples:
+          - Lightning Bolt
+          - Tarmogoyf
+          - "Jace, the Mind Sculptor"
+        tags: [identifier, display]
+
+      - name: setCode
+        businessName: Set Code
+        logicalType: string
+        physicalType: varchar
+        description: Foreign key to sets.code. Short uppercase code identifying the set this printing belongs to.
+        required: true
+        primaryKey: false
+        examples:
+          - DMU
+          - NEO
+          - 2X2
+        tags: [identifier, foreign-key]
+
+      - name: number
+        businessName: Collector Number
+        logicalType: string
+        physicalType: varchar
+        description: Collector number within the set (string because of suffixes like "123a", "★").
+        required: false
+        primaryKey: false
+        examples:
+          - "142"
+          - 201a
+          - 350★
+        tags: [identifier]
+
+      - name: manaCost
+        businessName: Mana Cost
+        logicalType: string
+        physicalType: varchar
+        description: >
+          Mana cost string using MTG symbol notation in braces. Numbers are generic mana;
+          letters are colored mana (W=White, U=Blue, B=Black, R=Red, G=Green). Hybrid and
+          Phyrexian costs use slashes, e.g. {2/W}, {B/P}. Null for lands and some tokens.
+        required: false
+        primaryKey: false
+        examples:
+          - "{R}"
+          - "{1}{G}"
+          - "{2}{U}{U}"
+        tags: [game-mechanic, cost]
+
+      - name: manaValue
+        businessName: Mana Value
+        logicalType: number
+        physicalType: double
+        description: Total converted mana cost (sum of generic + colored pips). Formerly "converted mana cost" (CMC). 0 for lands.
+        required: false
+        primaryKey: false
+        examples:
+          - 1.0
+          - 2.0
+          - 7.0
+        tags: [game-mechanic, cost, metric]
+
+      - name: colors
+        businessName: Colors
+        logicalType: array
+        physicalType: varchar
+        description: >
+          Comma-separated list of the card's colors (not a native list type). Each element is
+          one of W, U, B, R, G. Empty string for colorless cards. Multi-color cards list all
+          colors, e.g. "U, R".
+        required: false
+        primaryKey: false
+        examples:
+          - R
+          - "U, R"
+          - ""
+        tags: [game-mechanic, color]
+
+      - name: colorIdentity
+        businessName: Color Identity
+        logicalType: array
+        physicalType: varchar
+        description: >
+          Comma-separated color identity used for Commander format deckbuilding. Includes the
+          card's colors plus any colored mana symbols appearing in its rules text. Superset
+          of colors.
+        required: false
+        primaryKey: false
+        examples:
+          - R
+          - "B, G"
+          - ""
+        tags: [game-mechanic, color, format-commander]
+
+      - name: colorIndicator
+        businessName: Color Indicator
+        logicalType: array
+        physicalType: varchar
+        description: Colors indicated by the dot on the type line for cards with no mana cost (e.g. morph flips, DFC backs). Comma-separated WUBRG.
+        required: false
+        primaryKey: false
+        examples:
+          - W
+          - "U, B"
+        tags: [game-mechanic, color]
+
+      - name: type
+        businessName: Full Type Line
+        logicalType: string
+        physicalType: varchar
+        description: Full printed type line including supertypes, types, and subtypes separated by an em-dash. e.g. "Legendary Creature — Human Wizard".
+        required: false
+        primaryKey: false
+        examples:
+          - Instant
+          - Creature — Lhurgoyf
+          - Legendary Planeswalker — Jace
+        tags: [game-mechanic, categorization]
+
+      - name: types
+        businessName: Card Types
+        logicalType: array
+        physicalType: varchar
+        description: >
+          Comma-separated list of core card types. Valid values include Creature, Instant,
+          Sorcery, Enchantment, Artifact, Land, Planeswalker, Battle, Tribal.
+        required: false
+        primaryKey: false
+        examples:
+          - Instant
+          - Creature
+          - "Enchantment, Artifact"
+        tags: [game-mechanic, categorization]
+
+      - name: subtypes
+        businessName: Subtypes
+        logicalType: array
+        physicalType: varchar
+        description: >
+          Comma-separated subtypes (creature types, land types, spell types, etc.).
+          e.g. "Human, Wizard" for a Human Wizard creature.
+        required: false
+        primaryKey: false
+        examples:
+          - Lhurgoyf
+          - "Human, Wizard"
+          - "Mountain"
+        tags: [game-mechanic, categorization]
+
+      - name: supertypes
+        businessName: Supertypes
+        logicalType: array
+        physicalType: varchar
+        description: Comma-separated supertypes. Valid values include Legendary, Basic, Snow, World, Ongoing.
+        required: false
+        primaryKey: false
+        examples:
+          - Legendary
+          - Basic
+          - "Legendary, Snow"
+        tags: [game-mechanic, categorization]
+
+      - name: rarity
+        businessName: Rarity
+        logicalType: string
+        physicalType: varchar
+        description: "Print rarity. Enum: common, uncommon, rare, mythic, special, bonus."
+        required: true
+        primaryKey: false
+        examples:
+          - common
+          - rare
+          - mythic
+        tags: [game-mechanic, categorization, enum]
+
+      - name: power
+        businessName: Power
+        logicalType: string
+        physicalType: varchar
+        description: >
+          Creature power. String (not numeric) because it may contain "*", "1+*", "X", or be
+          NULL for non-creatures.
+        required: false
+        primaryKey: false
+        examples:
+          - "2"
+          - "*"
+          - 1+*
+        tags: [game-mechanic, creature-stat]
+
+      - name: toughness
+        businessName: Toughness
+        logicalType: string
+        physicalType: varchar
+        description: Creature toughness. String for the same reason as power. NULL for non-creatures.
+        required: false
+        primaryKey: false
+        examples:
+          - "3"
+          - "*"
+          - 1+*
+        tags: [game-mechanic, creature-stat]
+
+      - name: loyalty
+        businessName: Loyalty
+        logicalType: string
+        physicalType: varchar
+        description: Planeswalker starting loyalty. String type preserves X/variable loyalties. NULL for non-planeswalkers.
+        required: false
+        primaryKey: false
+        examples:
+          - "3"
+          - "4"
+          - X
+        tags: [game-mechanic, planeswalker]
+
+      - name: defense
+        businessName: Defense
+        logicalType: string
+        physicalType: varchar
+        description: Battle card defense value. NULL for non-battles.
+        required: false
+        primaryKey: false
+        examples:
+          - "4"
+          - "5"
+        tags: [game-mechanic, battle]
+
+      - name: text
+        businessName: Rules Text
+        logicalType: string
+        physicalType: varchar
+        description: Oracle rules text of the card, including abilities and reminder text.
+        required: false
+        primaryKey: false
+        examples:
+          - Lightning Bolt deals 3 damage to any target.
+          - "Flying, trample"
+        tags: [rules-text]
+
+      - name: flavorText
+        businessName: Flavor Text
+        logicalType: string
+        physicalType: varchar
+        description: Italicized flavor text printed on the card. Non-mechanical.
+        required: false
+        primaryKey: false
+        examples:
+          - "The sparkmage shrieked, calling on the rage of the storms..."
+        tags: [flavor]
+
+      - name: keywords
+        businessName: Keywords
+        logicalType: array
+        physicalType: varchar
+        description: >
+          Comma-separated list of keyword abilities on the card
+          (e.g. Flying, Trample, Deathtouch, Haste, Lifelink).
+        required: false
+        primaryKey: false
+        examples:
+          - Flying
+          - "Flying, Vigilance"
+          - "Trample, Haste"
+        tags: [game-mechanic, keyword]
+
+      - name: layout
+        businessName: Card Layout
+        logicalType: string
+        physicalType: varchar
+        description: >
+          Physical card layout. Enum: normal, split, flip, transform, modal_dfc, meld,
+          leveler, saga, adventure, class, case, prototype, mutate, aftermath, augment,
+          host, planar, scheme, vanguard, reversible_card, prepare.
+        required: false
+        primaryKey: false
+        examples:
+          - normal
+          - modal_dfc
+          - saga
+        tags: [categorization, enum]
+
+      - name: side
+        businessName: Card Side
+        logicalType: string
+        physicalType: varchar
+        description: For multi-face cards (transform, MDFC, meld, split), indicates which face this row represents ("a", "b", "c"). NULL for single-face cards.
+        required: false
+        primaryKey: false
+        examples:
+          - a
+          - b
+        tags: [categorization, multi-face]
+
+      - name: frameEffects
+        businessName: Frame Effects
+        logicalType: array
+        physicalType: varchar
+        description: Comma-separated visual frame treatments (e.g. legendary, showcase, extendedart, nyxtouched, snow).
+        required: false
+        primaryKey: false
+        examples:
+          - legendary
+          - showcase
+          - "extendedart, nyxtouched"
+        tags: [visual, categorization]
+
+      - name: frameVersion
+        businessName: Frame Version
+        logicalType: string
+        physicalType: varchar
+        description: Generation of the card frame design. Values include 1993, 1997, 2003, 2015, future.
+        required: false
+        primaryKey: false
+        examples:
+          - "2015"
+          - "2003"
+        tags: [visual, categorization]
+
+      - name: borderColor
+        businessName: Border Color
+        logicalType: string
+        physicalType: varchar
+        description: "Border color of the printed card. Enum: black, white, silver, gold, borderless, yellow."
+        required: false
+        primaryKey: false
+        examples:
+          - black
+          - borderless
+        tags: [visual, enum]
+
+      - name: availability
+        businessName: Availability
+        logicalType: array
+        physicalType: varchar
+        description: Comma-separated list of games where this printing exists (paper, mtgo, arena, dreamcast).
+        required: false
+        primaryKey: false
+        examples:
+          - paper
+          - "paper, mtgo"
+          - "paper, mtgo, arena"
+        tags: [availability]
+
+      - name: finishes
+        businessName: Finishes
+        logicalType: array
+        physicalType: varchar
+        description: Comma-separated available finishes for this printing (nonfoil, foil, etched, glossy).
+        required: false
+        primaryKey: false
+        examples:
+          - nonfoil
+          - "nonfoil, foil"
+        tags: [print-treatment]
+
+      - name: producedMana
+        businessName: Produced Mana
+        logicalType: array
+        physicalType: varchar
+        description: For mana-producing cards (mostly lands), comma-separated colors of mana produced. Includes C for colorless.
+        required: false
+        primaryKey: false
+        examples:
+          - "W, U, B, R, G"
+          - "G"
+          - C
+        tags: [game-mechanic, color, land]
+
+      - name: edhrecRank
+        businessName: EDHREC Rank
+        logicalType: integer
+        physicalType: bigint
+        description: Popularity rank on EDHREC.com (Commander format usage). Lower = more popular. Null if unranked.
+        required: false
+        primaryKey: false
+        examples:
+          - 1
+          - 250
+          - 15000
+        tags: [popularity, format-commander, metric]
+
+      - name: edhrecSaltiness
+        businessName: EDHREC Saltiness
+        logicalType: number
+        physicalType: double
+        description: Community "saltiness" score from EDHREC — how much Commander players dislike seeing this card. Higher = saltier.
+        required: false
+        primaryKey: false
+        examples:
+          - 0.5
+          - 2.7
+        tags: [popularity, format-commander, metric]
+
+      - name: isReserved
+        businessName: Is Reserved List
+        logicalType: boolean
+        physicalType: boolean
+        description: True if the card is on Wizards' Reserved List (never to be reprinted). High collector value indicator.
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [collector, policy]
+
+      - name: isReprint
+        businessName: Is Reprint
+        logicalType: boolean
+        physicalType: boolean
+        description: True if this is not the card's first printing.
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [printing-history]
+
+      - name: isPromo
+        businessName: Is Promo
+        logicalType: boolean
+        physicalType: boolean
+        description: True if this printing is a promotional card (not from a standard set release).
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [categorization]
+
+      - name: isFullArt
+        businessName: Is Full Art
+        logicalType: boolean
+        physicalType: boolean
+        description: True if the card uses a full-art frame.
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [visual]
+
+      - name: isFunny
+        businessName: Is Funny
+        logicalType: boolean
+        physicalType: boolean
+        description: True for Un-set / joke cards not legal in normal play.
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [categorization]
+
+      - name: isOnlineOnly
+        businessName: Is Online Only
+        logicalType: boolean
+        physicalType: boolean
+        description: True if the printing exists only in digital clients (MTGO/Arena).
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [availability]
+
+      - name: isStorySpotlight
+        businessName: Is Story Spotlight
+        logicalType: boolean
+        physicalType: boolean
+        description: True if the card is marked as a story spotlight (key narrative moment).
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [flavor, story]
+
+      - name: artist
+        businessName: Artist
+        logicalType: string
+        physicalType: varchar
+        description: Illustrator credit. May contain multiple artists separated by "&" for some cards.
+        required: false
+        primaryKey: false
+        examples:
+          - Christopher Rush
+          - Rebecca Guay
+        tags: [attribution]
+
+      - name: language
+        businessName: Language
+        logicalType: string
+        physicalType: varchar
+        description: Language of this printing. Most rows are "English".
+        required: false
+        primaryKey: false
+        examples:
+          - English
+          - Japanese
+        tags: [localization]
+
+      - name: originalReleaseDate
+        businessName: Original Release Date
+        logicalType: string
+        physicalType: varchar
+        description: ISO date (YYYY-MM-DD) for promo/special printings that have a release date independent of their parent set. NULL otherwise.
+        required: false
+        primaryKey: false
+        examples:
+          - 2021-06-18
+          - 2022-09-09
+        tags: [temporal]

@@ -1,0 +1,219 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: 7c3a2e5b-4b9f-4e32-8b1f-mtgjson-sets
+name: mtgjson_sets
+version: 1.0.0
+status: active
+description:
+  purpose: >
+    Catalog of Magic: The Gathering set releases from MTGJSON. One row per set
+    (expansion, core set, commander deck product, etc.). Used as a dimension
+    table joined to cards on cards.setCode = sets.code.
+
+schema:
+  - name: sets
+    logicalType: object
+    physicalType: table
+    description: One row per MTG set. ~855 rows.
+    properties:
+      - name: code
+        businessName: Set Code
+        logicalType: string
+        physicalType: varchar
+        description: Short uppercase identifier for the set (e.g. LEA, NEO, DMU). Primary key. Referenced by cards.setCode.
+        required: true
+        primaryKey: true
+        examples:
+          - LEA
+          - NEO
+          - DMU
+        tags: [identifier, primary-key]
+
+      - name: name
+        businessName: Set Name
+        logicalType: string
+        physicalType: varchar
+        description: Official full name of the set.
+        required: true
+        primaryKey: false
+        examples:
+          - Limited Edition Alpha
+          - "Kamigawa: Neon Dynasty"
+          - Modern Horizons 2
+        tags: [identifier, display]
+
+      - name: releaseDate
+        businessName: Release Date
+        logicalType: date
+        physicalType: varchar
+        description: ISO date (YYYY-MM-DD) the set was released. Stored as varchar but parseable as date.
+        required: true
+        primaryKey: false
+        examples:
+          - 1993-08-05
+          - 2022-02-18
+          - 2022-09-09
+        tags: [temporal]
+
+      - name: type
+        businessName: Set Type
+        logicalType: string
+        physicalType: varchar
+        description: >
+          Category of set. Enum: core, expansion, masters, masterpiece, commander,
+          draft_innovation, duel_deck, from_the_vault, premium_deck, starter,
+          archenemy, planechase, vanguard, funny, promo, token, box, alchemy,
+          spellbook, treasure_chest, memorabilia, minigame, arsenal, eternal.
+        required: true
+        primaryKey: false
+        examples:
+          - expansion
+          - core
+          - commander
+        tags: [categorization, enum]
+
+      - name: block
+        businessName: Block
+        logicalType: string
+        physicalType: varchar
+        description: Named block the set belongs to (used in older MTG marketing, e.g. "Ravnica Block", "Modern Horizons Block"). NULL for standalone sets.
+        required: false
+        primaryKey: false
+        examples:
+          - Modern Horizons Block
+          - Core Set
+        tags: [categorization]
+
+      - name: parentCode
+        businessName: Parent Set Code
+        logicalType: string
+        physicalType: varchar
+        description: If this set is a supplement to a parent set (e.g. commander decks for an expansion, promo subsets), the parent's set code. Self-reference to sets.code.
+        required: false
+        primaryKey: false
+        examples:
+          - NEO
+          - DMU
+        tags: [identifier, foreign-key, hierarchy]
+
+      - name: baseSetSize
+        businessName: Base Set Size
+        logicalType: integer
+        physicalType: bigint
+        description: Number of cards in the main set print run (excludes bonus sheets, promos, special treatments).
+        required: false
+        primaryKey: false
+        examples:
+          - 295
+          - 281
+          - 302
+        tags: [metric, size]
+
+      - name: totalSetSize
+        businessName: Total Set Size
+        logicalType: integer
+        physicalType: bigint
+        description: Total number of distinct printings in the set including bonus sheets, alternate arts, and special treatments.
+        required: false
+        primaryKey: false
+        examples:
+          - 295
+          - 436
+          - 514
+        tags: [metric, size]
+
+      - name: isFoilOnly
+        businessName: Is Foil Only
+        logicalType: boolean
+        physicalType: boolean
+        description: True if every card in the set is foil (e.g. From the Vault products).
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [print-treatment]
+
+      - name: isNonFoilOnly
+        businessName: Is Non-Foil Only
+        logicalType: boolean
+        physicalType: boolean
+        description: True if no foil versions exist for any card in the set.
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [print-treatment]
+
+      - name: isOnlineOnly
+        businessName: Is Online Only
+        logicalType: boolean
+        physicalType: boolean
+        description: True if the set only exists in digital clients (MTGO/Arena).
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [availability]
+
+      - name: isPaperOnly
+        businessName: Is Paper Only
+        logicalType: boolean
+        physicalType: boolean
+        description: True if the set was released only in paper form, never digitally.
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [availability]
+
+      - name: isForeignOnly
+        businessName: Is Foreign Only
+        logicalType: boolean
+        physicalType: boolean
+        description: True if the set was released only in non-English languages (e.g. Renaissance, Rinascimento).
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [availability, localization]
+
+      - name: isPartialPreview
+        businessName: Is Partial Preview
+        logicalType: boolean
+        physicalType: boolean
+        description: True if the set data represents a pre-release preview not yet containing all cards.
+        required: false
+        primaryKey: false
+        examples:
+          - true
+          - false
+        tags: [data-quality]
+
+      - name: languages
+        businessName: Languages
+        logicalType: array
+        physicalType: varchar
+        description: Comma-separated list of languages the set was released in.
+        required: false
+        primaryKey: false
+        examples:
+          - "English"
+          - "English, Japanese, German, French, Italian, Spanish, Portuguese (Brazil), Russian, Korean, Chinese Simplified, Chinese Traditional"
+        tags: [localization]
+
+      - name: keyruneCode
+        businessName: Keyrune Icon Code
+        logicalType: string
+        physicalType: varchar
+        description: Code used by the Keyrune icon font for displaying the set symbol.
+        required: false
+        primaryKey: false
+        examples:
+          - NEO
+          - DMU
+        tags: [visual, reference]

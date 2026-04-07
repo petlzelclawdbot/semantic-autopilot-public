@@ -1,0 +1,29 @@
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Raw data
+data/
+
+# Node
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# Backups created by model-enhancer
+backups/
+
+# Publisher's working copy of packages (regenerated on startup)
+publisher_data/
+publisher.db
+publisher.db.wal
+
+# OS
+.DS_Store
+
+# Parquet/duckdb (defensive — also covered by data/)
+*.parquet
+*.duckdb
