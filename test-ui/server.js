@@ -31,8 +31,12 @@ const LOG_DIR = path.join(REPO_ROOT, 'logs');
 const SESSION_LOG = path.join(LOG_DIR, 'sessions.jsonl');
 
 const SYSTEM_PROMPT_PATH = path.join(__dirname, 'system-prompt.txt');
+const ANALYST_PROMPT_PATH = path.join(__dirname, 'analyst-prompt.md');
 function loadSystemPrompt() {
   return fs.readFileSync(SYSTEM_PROMPT_PATH, 'utf8');
+}
+function loadAnalystPrompt() {
+  return fs.readFileSync(ANALYST_PROMPT_PATH, 'utf8');
 }
 
 const STATIC = {
@@ -176,9 +180,78 @@ async function runAskLoop(question) {
     finalRows: last?.rows ?? null,
     finalError: last?.error ?? null,
     enhancementCandidate: last?.error ? enhancer.isMissingFieldError(last.error) : false,
+    analysis: null,
   };
+
+  // Phase 2: analyst pass. Only run if the query succeeded.
+  if (out.finalRows && !out.finalError) {
+    try {
+      out.analysis = await analyzeResults({
+        question,
+        query: last.query,
+        rows: out.finalRows,
+      });
+    } catch (e) {
+      out.analysisError = e.message;
+    }
+  }
+
   logSession({ ts: new Date().toISOString(), kind: 'ask', ...out });
   return out;
+}
+
+// ---------- Analyst ----------
+
+// Rows can be large (e.g. 100 artists). Cap what we send to Claude so we
+// stay well under the token budget.
+const MAX_ROWS_TO_ANALYST = 50;
+
+async function analyzeResults({ question, query, rows }) {
+  const truncated = rows.length > MAX_ROWS_TO_ANALYST;
+  const shown = truncated ? rows.slice(0, MAX_ROWS_TO_ANALYST) : rows;
+
+  const user =
+    `Question: ${question}\n\n` +
+    `Malloy query that ran:\n${query}\n\n` +
+    `Result rows (${rows.length} total${truncated ? `, showing first ${MAX_ROWS_TO_ANALYST}` : ''}):\n` +
+    JSON.stringify(shown, null, 2) +
+    `\n\nRespond with the JSON object described in the system prompt. JSON only.`;
+
+  const raw = await callClaude({
+    system: loadAnalystPrompt(),
+    user,
+    maxTokens: 1500,
+  });
+
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/, '')
+    .trim();
+
+  let parsed;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (e) {
+    throw new Error(`analyst returned non-JSON: ${cleaned.slice(0, 300)}`);
+  }
+
+  // Validate chart shape defensively.
+  if (parsed.chart) {
+    const c = parsed.chart;
+    if (
+      !c.type ||
+      !Array.isArray(c.labels) ||
+      !Array.isArray(c.data) ||
+      c.labels.length !== c.data.length
+    ) {
+      parsed.chart = null;
+      parsed.caveats =
+        (parsed.caveats ? parsed.caveats + ' ' : '') +
+        '(Chart was dropped — invalid shape from analyst.)';
+    }
+  }
+  return parsed;
 }
 
 // ---------- HTTP server ----------

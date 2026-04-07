@@ -37,7 +37,7 @@ The stack:
   <https://mtgjson.com/api/v5/AllPrintingsParquetFiles.zip>, unzip, and
   copy `cards.parquet` and `sets.parquet` into `data/`.
 - **Anthropic API key** in `.env.local`:
-
+sd
   ```bash
   ANTHROPIC_API_KEY=sk-ant-...
   ```
@@ -179,7 +179,52 @@ reachable in subsequent questions you'd need to either (a) regenerate
 `system-prompt.txt` after each apply, or (b) inject "recently-added
 fields" into the user message dynamically.
 
-## Phase 6 — Git-tracked model evolution
+## Phase 6 — Analyst mode (NYT-style visualization)
+
+The test UI now makes **two** Claude calls per question:
+
+1. **Query generation** (Phase 4/5 flow) — translate NL → Malloy, execute,
+   retry on error.
+2. **Analysis** (new) — hand the successful rows back to Claude under a
+   separate analyst system prompt
+   ([test-ui/analyst-prompt.md](test-ui/analyst-prompt.md)). The analyst
+   returns JSON with `insight`, `analysis`, an optional `chart`, and
+   optional `caveats`.
+
+The UI leads with the insight as a large serif pull-quote. The raw
+query, attempts, and rows are hidden inside a collapsible "Show query &
+raw data" section — they're still there for debugging, just no longer
+the headline.
+
+### Chart philosophy
+
+Charts are rendered with Chart.js, styled for clarity over decoration:
+
+- Serif title that states the *finding*, not the axes ("Rares get
+  reprinted more than commons", not "Card count by rarity").
+- Muted achromatic bars with a single red accent on annotated points.
+- Gridlines reduced to `#e5e5e5`; no legends (single-series only).
+- Annotations rendered as direct-label callouts below the chart.
+
+The analyst is instructed to **withhold** charts for single numbers,
+two-item comparisons, or cases where prose tells the story better.
+Empirically this works well — on the smoke-test battery:
+
+| Question                                                | Chart? | Why                                 |
+|---------------------------------------------------------|--------|-------------------------------------|
+| "How many total cards are there?"                       | no     | single number                       |
+| "Show me cards by rarity"                               | bar    | 6 categories worth comparing        |
+| "How has the number of cards per year changed?"         | line   | 34-year trend                       |
+| "Are there more red or blue cards?"                     | no     | two-item comparison → just say it   |
+| "What's the relationship between mana value and rarity?"| bar    | 5 categories + a real outlier       |
+| "Which 5 sets have the most printings?"                 | hbar   | long category labels                |
+
+The analyst also flags real data quirks unprompted — the Gleemax
+outlier (one card with mana_value = 1,000,000 inflating the rare
+average), incomplete 2025/26 years, and the printings-vs-unique-cards
+distinction all showed up as `caveats` without being asked.
+
+## Phase 7 — Git-tracked model evolution
 
 Every applied model change now creates a real git commit on the current
 branch. The flow extends Phase 5:

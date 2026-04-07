@@ -3,16 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Malloy × Claude — MTG analytics</title>
+  <title>MTG analyst — Malloy × Claude</title>
   <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <main>
     <h1>Ask the MTG card database</h1>
     <p class="hint">
-      Claude → Malloy → DuckDB. Failed queries auto-retry up to 2× with the
-      error fed back. If retries can't fix it, you'll be offered an
-      additive model change to apply.
+      Claude writes Malloy against the MTGJSON card model, executes it,
+      and then interprets the results. Charts appear only when they add
+      understanding.
     </p>
 
     <form id="ask-form">
@@ -20,7 +21,7 @@
         id="question"
         type="text"
         autocomplete="off"
-        placeholder="e.g. How many cards are there by rarity?"
+        placeholder="e.g. How has the number of cards per year changed?"
         autofocus
       />
       <button type="submit">Ask</button>
@@ -28,15 +29,29 @@
 
     <div id="status"></div>
 
-    <section id="attempts-section" hidden>
-      <h2>Attempts</h2>
-      <div id="attempts"></div>
+    <!-- Analyst output -->
+    <section id="insight-section" hidden>
+      <p id="insight" class="insight"></p>
+      <p id="analysis" class="analysis" hidden></p>
+      <div id="chart-wrap" class="chart-container" hidden>
+        <canvas id="chart"></canvas>
+      </div>
+      <div id="annotations" class="annotations" hidden></div>
+      <p id="caveats" class="caveats" hidden></p>
     </section>
 
-    <section id="results-section" hidden>
-      <h2>Results</h2>
-      <div id="results"></div>
-    </section>
+    <!-- Collapsible details: attempts, query, raw rows -->
+    <details id="details" hidden>
+      <summary>Show query &amp; raw data</summary>
+      <section id="attempts-section">
+        <h2>Attempts</h2>
+        <div id="attempts"></div>
+      </section>
+      <section id="results-section" hidden>
+        <h2>Rows</h2>
+        <div id="results"></div>
+      </section>
+    </details>
 
     <section id="enhance-section" hidden>
       <h2>Model enhancement</h2>
@@ -52,12 +67,12 @@
     <section id="examples">
       <h3>Try:</h3>
       <ul>
-        <li><a href="#" data-q="How many cards are there?">How many cards are there?</a></li>
-        <li><a href="#" data-q="Show me card count by rarity">Show me card count by rarity</a></li>
-        <li><a href="#" data-q="What's the average mana value of mythic creatures?">What's the average mana value of mythic creatures?</a></li>
-        <li><a href="#" data-q="Which 10 sets have the most cards?">Which 10 sets have the most cards?</a></li>
-        <li><a href="#" data-q="How many multicolor cards are in each set? Top 10.">How many multicolor cards are in each set? Top 10.</a></li>
-        <li><a href="#" data-q="Who is the most prolific artist by card count?">Who is the most prolific artist by card count? <em>(should trigger model enhancement — artist isn't exposed)</em></a></li>
+        <li><a href="#" data-q="How many total cards are there?">How many total cards are there? <em>(no chart)</em></a></li>
+        <li><a href="#" data-q="Show me cards by rarity">Show me cards by rarity <em>(bar chart)</em></a></li>
+        <li><a href="#" data-q="How has the number of cards per year changed?">How has the number of cards per year changed? <em>(line)</em></a></li>
+        <li><a href="#" data-q="Are there more red or blue cards?">Are there more red or blue cards? <em>(no chart)</em></a></li>
+        <li><a href="#" data-q="What's the relationship between mana value and rarity?">What's the relationship between mana value and rarity?</a></li>
+        <li><a href="#" data-q="Who are the 10 most prolific artists?">Who are the 10 most prolific artists?</a></li>
       </ul>
     </section>
   </main>
