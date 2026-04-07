@@ -177,6 +177,60 @@ reachable in subsequent questions you'd need to either (a) regenerate
 `system-prompt.txt` after each apply, or (b) inject "recently-added
 fields" into the user message dynamically.
 
+## Phase 6 — Git-tracked model evolution
+
+Every applied model change now creates a real git commit on the current
+branch. The flow extends Phase 5:
+
+1. Apply writes the snippet, mirrors to `publisher_data/`, hits reload —
+   *and then* runs `git add Malloy-source-files/<file> && git commit` with
+   a structured message.
+2. The UI shows the short commit hash and subject line in the
+   enhancement status, and refreshes the **Model history** panel.
+3. **Undo last model change** in the history panel calls `/api/rollback`,
+   which:
+   - Finds the most recent commit touching `Malloy-source-files/`.
+   - Runs `git revert --no-edit <hash>` (creates a new revert commit;
+     does not rewrite history).
+   - Re-syncs `publisher_data/` from the now-reverted source files.
+   - Hits the Publisher reload endpoint.
+
+### Commit message shape
+
+```text
+Auto: add_dimension for: "<user question>"
+
+Reasoning: <Claude's explanation>
+
+Code added:
+<the snippet>
+
+Error that triggered this:
+<the original error message>
+```
+
+This makes `git log --oneline -- Malloy-source-files` a readable
+chronicle of how the model grew, and `git diff HEAD~3 -- Malloy-source-files`
+shows exactly what was added over the last three changes.
+
+### Endpoints
+
+| Method | Path                | Purpose                                 |
+|--------|---------------------|-----------------------------------------|
+| GET    | `/api/history`      | Last N commits touching the model dir   |
+| POST   | `/api/rollback`     | Revert most recent model commit         |
+| POST   | `/api/apply`        | Apply change (now also commits)         |
+
+### Safety
+
+- Allowlist still enforced (`cards.malloy`, `sets.malloy` only).
+- `MAX_CHANGES_PER_SESSION` cap unchanged (3 per server lifetime).
+- Backups in `backups/` are still written even though git also has the
+  history — they're a belt-and-suspenders for the publisher_data copy.
+- Rollback uses `git revert` (additive) not `git reset` (history rewrite).
+- All git operations are scoped to the repo root via `execFileSync`
+  with explicit `cwd`; no shell interpolation.
+
 ## Ports used
 
 | Service          | Port | URL                     |

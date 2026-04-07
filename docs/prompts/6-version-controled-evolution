@@ -13,7 +13,7 @@ The conversational analytics system can now propose model changes when queries f
 cd ~/repos/Malloy\ Test/Malloy-source-files
 git status
 git log --oneline -5
-```
+```s
 
 Confirm current state and note the HEAD commit as our baseline.
 
