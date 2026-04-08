@@ -1,4 +1,4 @@
-# Malloy Test — MTGJSON Conversational Analytics
+# Conversational Analytics From Scratch
 
 A feasibility test for LLM-generated Malloy semantic models plus
 natural-language querying. 
